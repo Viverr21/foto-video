@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upload Foto/Video Random</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js"></script>
+  <style>
+    /* animasi fade + zoom */
+    .fade-in {
+      animation: fadeIn 0.8s ease forwards;
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+    /* animasi background gradasi */
+    body {
+      background: linear-gradient(270deg, #9333ea, #ec4899, #06b6d4);
+      background-size: 600% 600%;
+      animation: gradient 15s ease infinite;
+    }
+    @keyframes gradient {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+  </style>
+</head>
+<body class="min-h-screen text-white flex flex-col items-center p-6">
+  <h1 class="text-4xl font-bold mb-6 drop-shadow-lg">📸 Upload Foto/Video 🚀</h1>
+
+  <!-- Upload -->
+  <div class="mb-6 flex gap-2">
+  <input type="file" id="fileInput" multiple
+    class="text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-2 rounded-md bg-white/20 backdrop-blur-md border border-white/30" />
+
+  <button onclick="uploadFiles()"
+    class="text-xs sm:text-sm px-3 py-1 sm:px-5 sm:py-2 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-400 hover:scale-105 transition transform shadow-lg">
+    Upload 🚀
+  </button>
+</div>
+
+
+  <!-- Galeri -->
+  <div id="gallery"
+       class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full max-w-6xl">
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center hidden z-50">
+    <div class="relative max-w-4xl w-11/12">
+      <button onclick="closeModal()" class="absolute -top-10 right-0 text-white text-2xl">✖</button>
+      <img id="modalImage" class="max-h-[80vh] mx-auto rounded-xl shadow-xl hidden" />
+      <video id="modalVideo" controls class="max-h-[80vh] mx-auto rounded-xl shadow-xl hidden"></video>
+    </div>
+  </div>
+
+<script>
+  // 🔑 Ganti dengan URL & anon key dari project Supabase kamu
+  const SUPABASE_URL = "https://uuzhhkjzjdwbjhbhhpvk.supabase.co";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1emhoa2p6amR3YmpoYmhocHZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5MzY0NTksImV4cCI6MjA3MzUxMjQ1OX0.lYWtAd7-Tw7he6Q3AvIOShC9e76TDsq_WhClbd-GrM4";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // upload file
+  async function uploadFiles() {
+    const files = document.getElementById("fileInput").files;
+    if (!files.length) return alert("Pilih file dulu!");
+
+    for (let file of files) {
+      const filePath = `public/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from("uploads").upload(filePath, file);
+
+      if (error) {
+        console.error("Upload gagal:", error.message);
+        alert("Gagal upload: " + error.message);
+      } else {
+        const { data } = supabase.storage.from("uploads").getPublicUrl(filePath);
+        let type = "";
+        if (/\.(jpg|jpeg|png|gif)$/i.test(file.name)) type = "image";
+        else if (/\.(mp4|webm|ogg)$/i.test(file.name)) type = "video";
+        addToGallery(data.publicUrl, type);
+      }
+    }
+  }
+
+  // load semua file dari bucket
+  async function loadGallery() {
+    const gallery = document.getElementById("gallery");
+    gallery.innerHTML = "";
+
+    const { data, error } = await supabase.storage.from("uploads").list("public", {
+      limit: 100,
+      sortBy: { column: "created_at", order: "desc" }
+    });
+
+    if (error) {
+      console.error("Gagal ambil file:", error.message);
+      return;
+    }
+
+    for (const item of data) {
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from("uploads")
+        .getPublicUrl(`public/${item.name}`);
+
+      let type = "";
+      if (/\.(jpg|jpeg|png|gif)$/i.test(item.name)) type = "image";
+      else if (/\.(mp4|webm|ogg)$/i.test(item.name)) type = "video";
+
+      addToGallery(publicUrl, type);
+    }
+  }
+
+  // tampilkan item ke galeri
+  function addToGallery(url, type) {
+    const gallery = document.getElementById("gallery");
+    const div = document.createElement("div");
+    div.className = "relative overflow-hidden rounded-2xl shadow-lg cursor-pointer transform hover:scale-105 transition fade-in";
+
+    if (type === "image") {
+      const img = document.createElement("img");
+      img.src = url;
+      img.className = "w-full h-56 object-cover";
+      img.onclick = () => openModal(url, "image");
+      div.appendChild(img);
+    } else if (type === "video") {
+      const vid = document.createElement("video");
+      vid.src = url;
+      vid.className = "w-full h-56 object-cover";
+      vid.muted = true;
+      vid.loop = true;
+      vid.autoplay = true;
+      vid.onclick = () => openModal(url, "video");
+      div.appendChild(vid);
+    }
+
+    gallery.appendChild(div);
+  }
+
+  // modal
+  function openModal(url, type) {
+    document.getElementById("modal").classList.remove("hidden");
+    const img = document.getElementById("modalImage");
+    const vid = document.getElementById("modalVideo");
+    img.classList.add("hidden");
+    vid.classList.add("hidden");
+
+    if (type === "image") {
+      img.src = url;
+      img.classList.remove("hidden");
+    } else {
+      vid.src = url;
+      vid.classList.remove("hidden");
+    }
+  }
+  function closeModal() {
+    document.getElementById("modal").classList.add("hidden");
+    document.getElementById("modalVideo").pause();
+  }
+
+  // load otomatis pas halaman dibuka
+  window.onload = loadGallery;
+</script>
+</body>
+</html>
+
